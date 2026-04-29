@@ -1,0 +1,73 @@
+spring:
+  application:
+    name: authorization
+
+  datasource:
+#    url: jdbc:postgresql://77.222.46.203:5432/prism
+    url: jdbc:postgresql://127.0.0.1:5432/prism
+    username: postgres
+    password: 120220
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+jwt:
+  access-token-expiration: 900000   # 15 минут (в миллисекундах)
+  refresh-token-expiration: 2592000000  # 30 дней
+
+blacklist:
+  enabled: true                         # включаем blacklist
+  cache-ttl: 900000                     # TTL для черного списка (15 минут)
+
+logging:
+  level:
+    com.example.authorization: DEBUG
+
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    doc-expansion: none
+    try-it-out-enabled: true
+    supported-submit-methods: get,post,put,delete
+  show-actuator: true
+  paths-to-match:
+    - /api/**
+    - /actuator/**
+  writer-with-default-pretty-printer: true
+
+info:
+  title: Auth Service API
+  description: |
+    ## Сервис аутентификации и авторизации
+    
+    ### Основные возможности:
+    - Регистрация пользователей
+    - Логин (JWT токены)
+    - Refresh токены
+    - Logout (Blacklist)
+    - Управление пользователями (ADMIN)
+    
+    ### Безопасность:
+    - RS256 асимметричное шифрование
+    - Refresh token rotation
+    - Blacklist через Redis
+  version: 1.0.0
+  contact:
+    name: Support Team
+    email: support@example.com
+

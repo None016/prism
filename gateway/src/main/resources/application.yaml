@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: gateway
+
+  cloud:
+    gateway:
+      routes:
+        # Auth Service (без JWT проверки)
+        - id: auth-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/auth/**, /swagger-ui/**, /v3/api-docs/**, /actuator/health
+
+        # User Service (с JWT проверкой)
+        - id: user-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - name: JwtAuthentication  # ✅ имя без "GatewayFilterFactory"
+
+        # Ticket Service
+        - id: ticket-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/tickets/**
+          filters:
+            - name: JwtAuthentication
+
+        # Workflow Service
+        - id: workflow-service
+          uri: http://localhost:8083
+          predicates:
+            - Path=/api/workflow/**
+          filters:
+            - name: JwtAuthentication
+
+        # Document Service
+        - id: document-service
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/documents/**
+          filters:
+            - name: JwtAuthentication
+
+  main:
+    web-application-type: reactive
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.example.gateway: DEBUG
