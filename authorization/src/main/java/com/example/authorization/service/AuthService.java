@@ -8,6 +8,7 @@ import com.example.authorization.model.Role;
 import com.example.authorization.model.Users;
 import com.example.authorization.repository.RoleRepository;
 import com.example.authorization.repository.UsersRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -17,6 +18,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -31,9 +34,11 @@ public class AuthService {
     private final UserDetailsService userDetailsService;
     private final RefreshTokenService refreshTokenService;
     private final BlacklistService blacklistService;
+    private final EventPublisher eventPublisher;
+    private final HttpServletRequest httpServletRequest;
 
     @Transactional
-    public String register(RegisterRequest request) {
+    public String register(RegisterRequest request, HttpServletRequest httpRequest) {
         // Проверка на существование
         if (usersRepository.existsByLogin(request.getLogin())) {
             log.warn("Registration failed: login {} already exists", request.getLogin());
@@ -67,13 +72,24 @@ public class AuthService {
                 .role(userRole)
                 .build();
 
-        usersRepository.save(user);
+        Users savedUser = usersRepository.save(user);
+        Map<String, Object> metadata = Map.of(
+                "ip", httpRequest.getRemoteAddr(),
+                "userAgent", httpRequest.getHeader("User-Agent")
+        );
+
+        eventPublisher.publishUserRegistered(
+                savedUser.getUuid().toString(),
+                savedUser.getLogin(),
+                savedUser.getEmail(),
+                metadata
+        );
         log.info("User registered successfully: {}", request.getLogin());
 
         return "User registered successfully!";
     }
 
-    public LoginResponse login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         log.info("=== LOGIN START ===");
         log.info("Login attempt for user: {}", request.getLogin());
 
@@ -109,6 +125,18 @@ public class AuthService {
                     .build();
 
             log.info("=== LOGIN END SUCCESS ===");
+
+            Map<String, Object> metadata = Map.of(
+                    "ip", httpRequest.getRemoteAddr(),
+                    "userAgent", httpRequest.getHeader("User-Agent")
+            );
+
+            eventPublisher.publishUserLoggedIn(
+                    userDetails.getUsername(),      // userId (или UUID пользователя, если у вас есть)
+                    userDetails.getUsername(),      // username
+                    metadata
+            );
+
             return response;
 
         } catch (Exception e) {
@@ -164,6 +192,7 @@ public class AuthService {
                 // Извлекаем username для логирования
                 try {
                     String username = jwtService.extractUsername(accessToken);
+                    eventPublisher.publishUserLoggedOut(username, username);
                     log.info("User {} logged out successfully", username);
                 } catch (Exception e) {
                     log.info("User logged out (token extracted)");

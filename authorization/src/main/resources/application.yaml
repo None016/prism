@@ -19,6 +19,12 @@ spring:
           max-idle: 8
           min-idle: 0
 
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
 jwt:
   access-token-expiration: 900000   # 15 минут (в миллисекундах)
   refresh-token-expiration: 2592000000  # 30 дней

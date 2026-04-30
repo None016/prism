@@ -1,0 +1,44 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: history
+
+  data:
+    mongodb:
+      host: localhost
+      port: 27017
+      database: history_db
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: history-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: false
+
+
+springdoc:
+  api-docs:
+    path: /api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operationsSorter: method
+    tagsSorter: alpha
+    tryItOutEnabled: true
+    filter: true
+  show-actuator: false
+  paths-to-match: /api/**
+
+logging:
+  level:
+    com.example.history: DEBUG
+    org.springframework.data.mongodb: INFO
