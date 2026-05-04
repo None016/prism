@@ -1,18 +1,16 @@
-package com.example.ticketservice.internal.controller;
+package com.example.ticketservice.api.controller;
 
 import com.example.ticketservice.domain.service.TicketService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
-/**
- * Внутренний контроллер для взаимодействия с Workflow Service.
- * Обычно такие эндпоинты закрыты от внешнего мира (например, через Network Policies в K8s).
- */
 @RestController
 @RequestMapping("/api/v1/internal/tickets")
 @RequiredArgsConstructor
@@ -21,15 +19,12 @@ public class InternalTicketController {
 
     private final TicketService ticketService;
 
-    /**
-     * Изменение статуса заявки.
-     * Вызывается Workflow Service при переходе по этапам.
-     */
     @Operation(summary = "Обновить статус (Internal)", description = "Используется Workflow Service")
+    @PreAuthorize("hasRole('WORKFLOW_SERVICE') or hasIpAddress('10.0.0.0/8')")
     @PatchMapping("/{uuid}/status")
     public ResponseEntity<Void> updateStatus(
             @PathVariable UUID uuid,
-            @RequestParam Integer statusId) {
+            @RequestParam @Min(1) Integer statusId) {
 
         ticketService.updateStatusInternal(uuid, statusId);
         return ResponseEntity.ok().build();

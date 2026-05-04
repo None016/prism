@@ -1,5 +1,6 @@
 package com.example.ticketservice.domain.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -15,7 +16,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @SQLRestriction("is_deleted = false")
-@org.hibernate.annotations.BatchSize(size = 25) // Добавляем для оптимизации
+@org.hibernate.annotations.BatchSize(size = 25)
 public class Ticket {
 
     @Id
@@ -59,8 +60,9 @@ public class Ticket {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "ditional_fields", columnDefinition = "jsonb")
-    private Object ditionalFields;
+    private JsonNode ditionalFields;
 
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
+
 }

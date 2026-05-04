@@ -136,6 +136,19 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- Spring Retry для повторных попыток при optimistic lock -->
+		<dependency>
+			<groupId>org.springframework.retry</groupId>
+			<artifactId>spring-retry</artifactId>
+		</dependency>
+
+		<!-- AOP для работы @Retryable -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aop</artifactId>
+		</dependency>
+
+
 	</dependencies>
 
 	<build>

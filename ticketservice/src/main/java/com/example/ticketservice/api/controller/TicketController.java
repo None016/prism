@@ -6,9 +6,10 @@ import com.example.ticketservice.api.dto.TicketResponse;
 import com.example.ticketservice.api.dto.TicketUpdateRequest;
 import com.example.ticketservice.domain.service.TicketService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,18 +17,26 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/tickets")
 @RequiredArgsConstructor
 @Tag(name = "Tickets", description = "Операции с заявками")
+@Validated
 public class TicketController {
 
     private final TicketService ticketService;
+
+    // Белый список разрешенных полей для сортировки (защита от SQL injection)
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "timeRequest", "timeUpdate", "priority", "title", "uuid"
+    );
 
     @Operation(summary = "Создать новую заявку")
     @PostMapping
@@ -45,13 +54,13 @@ public class TicketController {
     @Operation(summary = "Список заявок с фильтрацией")
     @GetMapping
     public Page<TicketResponse> getTickets(
-            @RequestParam(required = false) Integer statusId,
-            @RequestParam(required = false) Integer typeId,
-            @RequestParam(required = false) Integer priorityMin,
+            @RequestParam(required = false) @Min(1) Integer statusId,
+            @RequestParam(required = false) @Min(1) Integer typeId,
+            @RequestParam(required = false) @Min(1) Integer priorityMin,
             @RequestParam(required = false) Instant dateFrom,
             @RequestParam(required = false) Instant dateTo,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(required = false) String sort) {
 
         TicketFilter filter = TicketFilter.builder()
@@ -70,7 +79,7 @@ public class TicketController {
     @PatchMapping("/{uuid}")
     public ResponseEntity<TicketResponse> updateTicket(
             @PathVariable UUID uuid,
-            @RequestBody TicketUpdateRequest request) {  // ← Убрали @Valid, так как все поля опциональны
+            @Valid @RequestBody TicketUpdateRequest request) {  // Добавлен @Valid
         return ResponseEntity.ok(ticketService.updateTicket(uuid, request));
     }
 
@@ -85,6 +94,15 @@ public class TicketController {
         if (sort != null && !sort.isEmpty()) {
             String[] sortParts = sort.split(",");
             String field = sortParts[0].trim();
+
+            // Защита от SQL injection - белый список разрешенных полей
+            if (!ALLOWED_SORT_FIELDS.contains(field)) {
+                throw new IllegalArgumentException(
+                        "Недопустимое поле для сортировки: " + field +
+                                ". Разрешены: " + ALLOWED_SORT_FIELDS
+                );
+            }
+
             Sort.Direction direction = Sort.Direction.ASC;
             if (sortParts.length > 1 && "desc".equals(sortParts[1].trim().toLowerCase())) {
                 direction = Sort.Direction.DESC;

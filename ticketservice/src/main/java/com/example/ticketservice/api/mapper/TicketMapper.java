@@ -1,8 +1,8 @@
 package com.example.ticketservice.api.mapper;
 
 import com.example.ticketservice.api.dto.TicketCreateRequest;
-import com.example.ticketservice.api.dto.TicketUpdateRequest;
 import com.example.ticketservice.api.dto.TicketResponse;
+import com.example.ticketservice.api.dto.TicketUpdateRequest;
 import com.example.ticketservice.domain.entity.Ticket;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -24,13 +24,12 @@ public interface TicketMapper {
     @Mapping(target = "isDeleted", ignore = true)
     @Mapping(target = "timeRequest", ignore = true)
     @Mapping(target = "timeClosing", ignore = true)
-    @Mapping(target = "ditionalFields", ignore = true)
+    // ditionalFields НЕ игнорируем - будет замаплен автоматически
     Ticket toEntity(TicketCreateRequest request);
 
     // Entity → Response
     @Mapping(source = "typeTicket.nameType", target = "typeName")
     @Mapping(source = "status.nameType", target = "statusName")
-    @Mapping(target = "ditionalFields", ignore = true)
     TicketResponse toResponse(Ticket ticket);
 
     // Helper для генерации UUID
