@@ -3,17 +3,21 @@ package com.example.ticketservice.domain.repository;
 import com.example.ticketservice.domain.entity.Ticket;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.domain.Specification;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
+@Slf4j
 public class TicketSpecification {
 
     public static Specification<Ticket> filter(
             Integer statusId,
             Integer typeId,
-            String executorId,
+            Integer institutionId,  // НОВЫЙ ПАРАМЕТР
+            UUID executorId,        // НОВЫЙ ПАРАМЕТР
             Instant dateFrom,
             Instant dateTo,
             Integer priorityMin
@@ -35,6 +39,21 @@ public class TicketSpecification {
 
             if (typeId != null) {
                 predicates.add(criteriaBuilder.equal(root.get("typeTicket").get("id"), typeId));
+            }
+
+            // НОВАЯ ФИЛЬТРАЦИЯ ПО УЧРЕЖДЕНИЮ
+            if (institutionId != null) {
+                predicates.add(criteriaBuilder.equal(root.get("idInstitution"), institutionId));
+            }
+
+            // НОВАЯ ФИЛЬТРАЦИЯ ПО ИСПОЛНИТЕЛЮ
+            if (executorId != null) {
+                // TODO: Когда добавится поле executor в таблицу tickets
+                // predicates.add(criteriaBuilder.equal(root.get("executorId"), executorId));
+
+                // ВРЕМЕННО: если поля executor нет, добавим комментарий
+                // Пока просто игнорируем или можно добавить заглушку
+                log.warn("Filter by executorId is not yet implemented - waiting for executor field in tickets table");
             }
 
             if (dateFrom != null) {

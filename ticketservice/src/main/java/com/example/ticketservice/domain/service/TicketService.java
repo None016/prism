@@ -118,11 +118,7 @@ public class TicketService {
                     .orElseThrow(() -> new EntityNotFoundException("Тип заявки с id=" + request.getIdType() + " не найден"));
             ticket.setTypeTicket(typeTicket);
         }
-        if (request.getStatus() != null) {
-            StatusTicket status = statusTicketRepository.findById(request.getStatus())
-                    .orElseThrow(() -> new EntityNotFoundException("Статус заявки с id=" + request.getStatus() + " не найден"));
-            ticket.setStatus(status);
-        }
+
 
         ticket.setTimeUpdate(Instant.now());
 
@@ -179,7 +175,8 @@ public class TicketService {
         Specification<Ticket> spec = TicketSpecification.filter(
                 filter.getStatusId(),
                 filter.getTypeId(),
-                null,
+                filter.getInstitutionId(),  // НОВЫЙ ПАРАМЕТР
+                filter.getExecutorId(),      // НОВЫЙ ПАРАМЕТР
                 filter.getDateFrom(),
                 filter.getDateTo(),
                 filter.getPriorityMin()
