@@ -27,9 +27,6 @@ public class TicketUpdateRequest {
     @Min(value = 1, message = "idContractor must be positive")
     private Integer idContractor;
 
-    @Min(value = 1, message = "Status must be positive")
-    private Integer status;
-
     @Min(value = 1, message = "Priority must be at least 1")
     @Max(value = 10, message = "Priority cannot exceed 10")
     private Integer priority;

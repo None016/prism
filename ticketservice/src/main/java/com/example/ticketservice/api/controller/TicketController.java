@@ -57,6 +57,8 @@ public class TicketController {
             @RequestParam(required = false) @Min(1) Integer statusId,
             @RequestParam(required = false) @Min(1) Integer typeId,
             @RequestParam(required = false) @Min(1) Integer priorityMin,
+            @RequestParam(required = false) @Min(1) Integer institutionId,  // НОВЫЙ ПАРАМЕТР
+            @RequestParam(required = false) UUID executorId,                // НОВЫЙ ПАРАМЕТР
             @RequestParam(required = false) Instant dateFrom,
             @RequestParam(required = false) Instant dateTo,
             @RequestParam(defaultValue = "0") @Min(0) int page,
@@ -67,6 +69,8 @@ public class TicketController {
                 .statusId(statusId)
                 .typeId(typeId)
                 .priorityMin(priorityMin)
+                .institutionId(institutionId)  // НОВОЕ ПОЛЕ
+                .executorId(executorId)        // НОВОЕ ПОЛЕ
                 .dateFrom(dateFrom)
                 .dateTo(dateTo)
                 .build();
@@ -79,7 +83,7 @@ public class TicketController {
     @PatchMapping("/{uuid}")
     public ResponseEntity<TicketResponse> updateTicket(
             @PathVariable UUID uuid,
-            @Valid @RequestBody TicketUpdateRequest request) {  // Добавлен @Valid
+            @Valid @RequestBody TicketUpdateRequest request) {
         return ResponseEntity.ok(ticketService.updateTicket(uuid, request));
     }
 
