@@ -1,3 +1,4 @@
+// authorization/model/Users.java
 package com.example.authorization.model;
 
 import jakarta.persistence.*;
@@ -8,10 +9,13 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.UuidGenerator;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;  // ✅ ВАЖНО: добавьте этот импорт!
+import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -20,7 +24,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Users implements UserDetails {  // ✅ Теперь implements работает
+public class Users implements UserDetails {
 
     @Id
     @UuidGenerator
@@ -48,9 +52,21 @@ public class Users implements UserDetails {  // ✅ Теперь implements ра
     @Column(name = "hesh_password", nullable = false, length = 255)
     private String heshPassword;
 
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "role_id", foreignKey = @ForeignKey(name = "Users_role_id_fkey"))
+    @JoinColumn(name = "role_id")
     private Role role;
+
+    // Связь с контрагентами через таблицу user_contractor
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_contractor",
+            joinColumns = @JoinColumn(name = "id_user"),
+            inverseJoinColumns = @JoinColumn(name = "id_contractor")
+    )
+    private List<Contractor> contractors = new ArrayList<>();
 
     // ===== Реализация методов UserDetails =====
 

@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8082
 
 ticket:
   default-status-id: 1
@@ -10,9 +10,9 @@ spring:
 
   datasource:
     # Твои реальные данные
-    url: jdbc:postgresql://localhost:5432/prism
+    url: jdbc:postgresql://80.93.62.239:5432/prism
     username: postgres
-    password: 120220
+    password: 12Hiro0016
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -26,6 +26,17 @@ spring:
 
   flyway:
     enabled: false  # ← ОТКЛЮЧАЕМ миграции, как просил
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Используем публичный ключ из Auth Service
+          public-key-location: classpath:keys/public.pem
+
+
+rsa:
+  public-key: classpath:keys/public.pem
 
 management:
   endpoints:

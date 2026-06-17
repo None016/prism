@@ -169,19 +169,9 @@ public class TicketService {
         return ticketMapper.toResponse(ticket);
     }
 
-    public Page<TicketResponse> getTickets(TicketFilter filter, Pageable pageable) {
-        log.debug("Fetching tickets with filter: {} and pageable: {}", filter, pageable);
-
-        Specification<Ticket> spec = TicketSpecification.filter(
-                filter.getStatusId(),
-                filter.getTypeId(),
-                filter.getInstitutionId(),  // НОВЫЙ ПАРАМЕТР
-                filter.getExecutorId(),      // НОВЫЙ ПАРАМЕТР
-                filter.getDateFrom(),
-                filter.getDateTo(),
-                filter.getPriorityMin()
-        );
-
+    @Transactional(readOnly = true)
+    public Page<TicketResponse> getTickets(Specification<Ticket> spec, Pageable pageable) {
+        log.debug("Fetching tickets with specification and pageable: {}", pageable);
         return ticketRepository.findAll(spec, pageable)
                 .map(ticketMapper::toResponse);
     }

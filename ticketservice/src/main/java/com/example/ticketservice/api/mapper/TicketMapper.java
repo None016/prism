@@ -16,7 +16,6 @@ import java.util.UUID;
 )
 public interface TicketMapper {
 
-    // Create Request → Entity
     @Mapping(target = "uuid", ignore = true)
     @Mapping(target = "typeTicket", ignore = true)
     @Mapping(target = "status", ignore = true)
@@ -24,15 +23,14 @@ public interface TicketMapper {
     @Mapping(target = "isDeleted", ignore = true)
     @Mapping(target = "timeRequest", ignore = true)
     @Mapping(target = "timeClosing", ignore = true)
-    // ditionalFields НЕ игнорируем - будет замаплен автоматически
+    @Mapping(target = "institution", ignore = true)
     Ticket toEntity(TicketCreateRequest request);
 
-    // Entity → Response
-    @Mapping(source = "typeTicket.nameType", target = "typeName")
-    @Mapping(source = "status.nameType", target = "statusName")
-    TicketResponse toResponse(Ticket ticket);
+    // Используем кастомный метод вместо автоматического маппинга
+    default TicketResponse toResponse(Ticket ticket) {
+        return TicketResponse.fromEntity(ticket);
+    }
 
-    // Helper для генерации UUID
     default UUID generateUuid() {
         return UUID.randomUUID();
     }

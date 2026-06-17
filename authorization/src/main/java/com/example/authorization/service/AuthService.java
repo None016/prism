@@ -2,23 +2,25 @@ package com.example.authorization.service;
 
 import com.example.authorization.dto.LoginRequest;
 import com.example.authorization.dto.LoginResponse;
-import com.example.authorization.dto.RefreshTokenRequest;
 import com.example.authorization.dto.RegisterRequest;
+import com.example.authorization.model.Contractor;
 import com.example.authorization.model.Role;
+import com.example.authorization.model.UserContractor;
 import com.example.authorization.model.Users;
-import com.example.authorization.repository.RoleRepository;
-import com.example.authorization.repository.UsersRepository;
+import com.example.authorization.repository.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -36,6 +38,9 @@ public class AuthService {
     private final BlacklistService blacklistService;
     private final EventPublisher eventPublisher;
     private final HttpServletRequest httpServletRequest;
+    private final ContractorRepository contractorRepository;
+    private final UserContractorRepository userContractorRepository;
+    private final UserInstitutionRepository userInstitutionRepository;
 
     @Transactional
     public String register(RegisterRequest request, HttpServletRequest httpRequest) {
@@ -60,6 +65,13 @@ public class AuthService {
                     return roleRepository.save(newRole);
                 });
 
+        // Получаем контрагента, если указан
+        Contractor contractor = null;
+        if (request.getContractorId() != null) {
+            contractor = contractorRepository.findById(request.getContractorId())
+                    .orElse(null); // или throw exception
+        }
+
         // Создаём пользователя
         Users user = Users.builder()
                 .name(request.getName())
@@ -70,6 +82,7 @@ public class AuthService {
                 .login(request.getLogin())
                 .heshPassword(passwordEncoder.encode(request.getPassword()))
                 .role(userRole)
+                .birthDate(request.getBirthDate())
                 .build();
 
         Users savedUser = usersRepository.save(user);
@@ -95,28 +108,43 @@ public class AuthService {
 
         try {
             log.info("Step 1: Authenticating...");
-            authenticationManager.authenticate(
+            Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getLogin(), request.getPassword())
             );
             log.info("Step 1: Authentication successful");
 
             log.info("Step 2: Loading user details...");
-            UserDetails userDetails = userDetailsService.loadUserByUsername(request.getLogin());
+            // Получаем userDetails из authentication
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+
+            // Получаем пользователя из БД для дополнительной информации
+            Users user = usersRepository.findByLogin(request.getLogin())
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
             log.info("Step 2: User details loaded for: {}", userDetails.getUsername());
 
-            log.info("Step 3: Generating access token...");
-            String accessToken = jwtService.generateAccessToken(userDetails);
-            log.info("Step 3: Access token generated");
+            log.info("Step 3: Getting user institutions...");
+            List<Integer> institutionIds = userInstitutionRepository.findInstitutionIdsByUserId(user.getUuid());
+            log.info("Institutions: {}", institutionIds);
 
-            log.info("Step 4: Generating refresh token...");
+            log.info("Step 4: Getting user contractors...");
+            List<Integer> contractorIds = userContractorRepository.findContractorIdsByUserId(user.getUuid());
+            log.info("Contractors: {}", contractorIds);
+
+            log.info("Step 5: Generating access token...");
+            // В методе login, при генерации токена:
+            String accessToken = jwtService.generateAccessToken(userDetails, institutionIds, contractorIds, user.getUuid());
+            log.info("Step 5: Access token generated");
+
+            log.info("Step 6: Generating refresh token...");
             String refreshToken = jwtService.generateRefreshToken(userDetails);
-            log.info("Step 4: Refresh token generated");
+            log.info("Step 6: Refresh token generated");
 
-            log.info("Step 5: Saving refresh token to Redis...");
+            log.info("Step 7: Saving refresh token to Redis...");
             refreshTokenService.saveRefreshToken(refreshToken, userDetails.getUsername());
-            log.info("Step 5: Refresh token saved");
+            log.info("Step 7: Refresh token saved");
 
-            log.info("Step 6: Building response...");
+            log.info("Step 8: Building response...");
             LoginResponse response = LoginResponse.builder()
                     .accessToken(accessToken)
                     .refreshToken(refreshToken)
@@ -126,14 +154,15 @@ public class AuthService {
 
             log.info("=== LOGIN END SUCCESS ===");
 
+            // Публикуем событие
             Map<String, Object> metadata = Map.of(
                     "ip", httpRequest.getRemoteAddr(),
                     "userAgent", httpRequest.getHeader("User-Agent")
             );
 
             eventPublisher.publishUserLoggedIn(
-                    userDetails.getUsername(),      // userId (или UUID пользователя, если у вас есть)
-                    userDetails.getUsername(),      // username
+                    user.getUuid().toString(),
+                    userDetails.getUsername(),
                     metadata
             );
 

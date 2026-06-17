@@ -1,3 +1,4 @@
+# gateway/src/main/resources/application.yaml
 spring:
   application:
     name: gateway
@@ -5,41 +6,22 @@ spring:
   cloud:
     gateway:
       routes:
-        # Auth Service (без JWT проверки)
         - id: auth-service
           uri: http://localhost:8081
           predicates:
-            - Path=/api/auth/**, /swagger-ui/**, /v3/api-docs/**, /actuator/health
+            - Path=/api/auth/**,/swagger-ui/**,/v3/api-docs/**,/actuator/health
 
-        # User Service (с JWT проверкой)
         - id: user-service
           uri: http://localhost:8081
           predicates:
             - Path=/api/users/**
           filters:
-            - name: JwtAuthentication  # ✅ имя без "GatewayFilterFactory"
+            - name: JwtAuthentication
 
-        # Ticket Service
         - id: ticket-service
           uri: http://localhost:8082
           predicates:
-            - Path=/api/tickets/**
-          filters:
-            - name: JwtAuthentication
-
-        # Workflow Service
-        - id: workflow-service
-          uri: http://localhost:8083
-          predicates:
-            - Path=/api/workflow/**
-          filters:
-            - name: JwtAuthentication
-
-        # Document Service
-        - id: document-service
-          uri: http://localhost:8084
-          predicates:
-            - Path=/api/documents/**
+            - Path=/api/v1/tickets/**
           filters:
             - name: JwtAuthentication
 
@@ -52,3 +34,4 @@ server:
 logging:
   level:
     com.example.gateway: DEBUG
+    org.springframework.cloud.gateway: DEBUG

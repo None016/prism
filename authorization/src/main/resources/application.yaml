@@ -1,12 +1,15 @@
+server:
+  port: 8081
+
 spring:
   application:
     name: authorization
 
   datasource:
-#    url: jdbc:postgresql://77.222.46.203:5432/prism
-    url: jdbc:postgresql://127.0.0.1:5432/prism
+    url: jdbc:postgresql://80.93.62.239:5432/prism
+#    url: jdbc:postgresql://127.0.0.1:5432/prism
     username: postgres
-    password: 120220
+    password: 12Hiro0016
 
   data:
     redis:
@@ -38,23 +41,18 @@ logging:
     com.example.authorization: DEBUG
 
 
+# authorization/src/main/resources/application.yml
 springdoc:
   api-docs:
+    path: /v3/api-docs
     enabled: true
-    path: /api-docs
   swagger-ui:
-    enabled: true
     path: /swagger-ui.html
-    operationsSorter: method
-    tagsSorter: alpha
-    doc-expansion: none
+    enabled: true
     try-it-out-enabled: true
-    supported-submit-methods: get,post,put,delete
-  show-actuator: true
-  paths-to-match:
-    - /api/**
-    - /actuator/**
-  writer-with-default-pretty-printer: true
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
 
 info:
   title: Auth Service API

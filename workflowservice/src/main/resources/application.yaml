@@ -6,9 +6,9 @@ spring:
     name: workflow-service
   
   datasource:
-    url: jdbc:postgresql://localhost:5433/prism
-    username: marcello
-    password: 13578900
+    url: jdbc:postgresql://127.0.0.1:5432/prism
+    username: postgres
+    password: 120220
     driver-class-name: org.postgresql.Driver
   
   jpa:

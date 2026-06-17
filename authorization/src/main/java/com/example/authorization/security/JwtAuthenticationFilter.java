@@ -1,6 +1,6 @@
+// authorization/security/JwtAuthenticationFilter.java
 package com.example.authorization.security;
 
-import com.example.authorization.service.BlacklistService;
 import com.example.authorization.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,7 +26,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
-    private final BlacklistService blacklistService;
 
     @Override
     protected void doFilterInternal(
@@ -36,27 +35,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
+        final String path = request.getServletPath();
 
-        // Пропускаем запросы без токена (они будут обработаны другими фильтрами)
+        log.debug("Processing request to path: {}, Auth header: {}", path,
+                authHeader != null ? "present" : "missing");
+
+        // Пропускаем публичные эндпоинты
+        if (path.startsWith("/api/auth/") ||
+                path.startsWith("/swagger-ui") ||
+                path.startsWith("/v3/api-docs") ||
+                path.startsWith("/actuator")) {
+            log.debug("Skipping JWT filter for public endpoint: {}", path);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Проверяем наличие Authorization header
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("Missing or invalid Authorization header for path: {}", path);
             filterChain.doFilter(request, response);
             return;
         }
 
         final String token = authHeader.substring(7);
+        log.debug("Token received: {}...", token.substring(0, Math.min(token.length(), 50)));
 
         try {
-            // ✅ ПРОВЕРКА НА BLACKLIST
-            if (blacklistService.isBlacklisted(token)) {
-                log.warn("Blacklisted token rejected");
-                sendError(response, "Token has been revoked");
-                return;
-            }
-
             final String username = jwtService.extractUsername(token);
+            log.debug("Extracted username from token: {}", username);
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+                log.debug("UserDetails loaded for: {}", username);
 
                 if (jwtService.validateToken(token, userDetails)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
@@ -66,19 +76,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    log.debug("Authenticated user: {}", username);
+                    log.info("Successfully authenticated user: {}", username);
+                } else {
+                    log.warn("Token validation failed for user: {}", username);
                 }
             }
         } catch (Exception e) {
-            log.warn("JWT validation failed: {}", e.getMessage());
+            log.error("JWT validation error: {}", e.getMessage(), e);
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    private void sendError(HttpServletResponse response, String message) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType("application/json");
-        response.getWriter().write("{\"error\": \"" + message + "\"}");
     }
 }

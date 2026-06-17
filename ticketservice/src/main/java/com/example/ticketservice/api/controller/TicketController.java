@@ -1,29 +1,38 @@
 package com.example.ticketservice.api.controller;
 
 import com.example.ticketservice.api.dto.TicketCreateRequest;
-import com.example.ticketservice.api.dto.TicketFilter;
 import com.example.ticketservice.api.dto.TicketResponse;
 import com.example.ticketservice.api.dto.TicketUpdateRequest;
+import com.example.ticketservice.domain.entity.Ticket;
+import com.example.ticketservice.domain.repository.TicketRepository;
+import com.example.ticketservice.domain.repository.TicketSpecification;
 import com.example.ticketservice.domain.service.TicketService;
+import com.example.ticketservice.api.mapper.TicketMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/tickets")
 @RequiredArgsConstructor
@@ -32,8 +41,9 @@ import java.util.UUID;
 public class TicketController {
 
     private final TicketService ticketService;
+    private final TicketRepository ticketRepository;
+    private final TicketMapper ticketMapper;
 
-    // Белый список разрешенных полей для сортировки (защита от SQL injection)
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "timeRequest", "timeUpdate", "priority", "title", "uuid"
     );
@@ -54,29 +64,39 @@ public class TicketController {
     @Operation(summary = "Список заявок с фильтрацией")
     @GetMapping
     public Page<TicketResponse> getTickets(
+            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
+            @RequestHeader(value = "X-User-Institutions", required = false) String institutionsHeader,
+            @RequestHeader(value = "X-User-Contractors", required = false) String contractorsHeader,
             @RequestParam(required = false) @Min(1) Integer statusId,
             @RequestParam(required = false) @Min(1) Integer typeId,
             @RequestParam(required = false) @Min(1) Integer priorityMin,
-            @RequestParam(required = false) @Min(1) Integer institutionId,  // НОВЫЙ ПАРАМЕТР
-            @RequestParam(required = false) UUID executorId,                // НОВЫЙ ПАРАМЕТР
+            @RequestParam(required = false) @Min(1) Integer institutionId,
             @RequestParam(required = false) Instant dateFrom,
             @RequestParam(required = false) Instant dateTo,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(required = false) String sort) {
 
-        TicketFilter filter = TicketFilter.builder()
-                .statusId(statusId)
-                .typeId(typeId)
-                .priorityMin(priorityMin)
-                .institutionId(institutionId)  // НОВОЕ ПОЛЕ
-                .executorId(executorId)        // НОВОЕ ПОЛЕ
-                .dateFrom(dateFrom)
-                .dateTo(dateTo)
-                .build();
+        String role = extractRole(rolesHeader);
+        UUID userId = userIdHeader != null ? UUID.fromString(userIdHeader) : null;
+
+        List<Integer> userInstitutionIds = parseIds(institutionsHeader);
+        List<Integer> userContractorIds = parseIds(contractorsHeader);
+
+        log.info("User {} with role {} - institutions: {}, contractors: {}",
+                userId, role, userInstitutionIds, userContractorIds);
+
+        Specification<Ticket> spec = TicketSpecification.filterWithParams(
+                role, userId, userInstitutionIds, userContractorIds,
+                statusId, typeId, institutionId, dateFrom, dateTo, priorityMin
+        );
 
         Pageable pageable = buildPageable(page, size, sort);
-        return ticketService.getTickets(filter, pageable);
+
+        // Используем репозиторий напрямую
+        Page<Ticket> tickets = ticketRepository.findAll(spec, pageable);
+        return tickets.map(ticketMapper::toResponse);
     }
 
     @Operation(summary = "Обновить заявку (частичное обновление)")
@@ -99,7 +119,6 @@ public class TicketController {
             String[] sortParts = sort.split(",");
             String field = sortParts[0].trim();
 
-            // Защита от SQL injection - белый список разрешенных полей
             if (!ALLOWED_SORT_FIELDS.contains(field)) {
                 throw new IllegalArgumentException(
                         "Недопустимое поле для сортировки: " + field +
@@ -114,5 +133,25 @@ public class TicketController {
             return PageRequest.of(page, size, Sort.by(direction, field));
         }
         return PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "timeRequest"));
+    }
+
+    private List<Integer> parseIds(String idsHeader) {
+        if (idsHeader == null || idsHeader.isEmpty()) {
+            return List.of();
+        }
+        return Arrays.stream(idsHeader.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(Integer::parseInt)
+                .collect(Collectors.toList());
+    }
+
+    private String extractRole(String rolesHeader) {
+        if (rolesHeader == null) return "ROLE_USER";
+        if (rolesHeader.contains("ROLE_ROOT")) return "ROLE_ROOT";
+        if (rolesHeader.contains("ROLE_ADMIN")) return "ROLE_ADMIN";
+        if (rolesHeader.contains("ROLE_MANAGER")) return "ROLE_MANAGER";
+        if (rolesHeader.contains("ROLE_EXECUTOR")) return "ROLE_EXECUTOR";
+        return "ROLE_USER";
     }
 }

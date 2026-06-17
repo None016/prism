@@ -37,15 +37,12 @@ public class JwtAuthenticationGatewayFilterFactory extends AbstractGatewayFilter
             ServerHttpRequest request = exchange.getRequest();
             String path = request.getURI().getPath();
 
-            // Пропускаем эндпоинты аутентификации
-            if (path.startsWith("/api/auth/") ||
-                    path.startsWith("/swagger-ui") ||
-                    path.startsWith("/v3/api-docs") ||
-                    path.equals("/actuator/health")) {
+            // Публичные эндпоинты (без JWT)
+            if (isPublicPath(path)) {
                 return chain.filter(exchange);
             }
 
-            // Проверяем заголовок Authorization
+            // Проверяем Authorization header
             List<String> authHeaders = request.getHeaders().get(HttpHeaders.AUTHORIZATION);
             if (authHeaders == null || authHeaders.isEmpty()) {
                 log.warn("Missing Authorization header for path: {}", path);
@@ -68,16 +65,42 @@ public class JwtAuthenticationGatewayFilterFactory extends AbstractGatewayFilter
                         .parseClaimsJws(token)
                         .getBody();
 
-                String username = claims.getSubject();
+                String username = claims.getSubject(); // это логин "ivan123"
+                String userId = claims.get("userId", String.class); // нужно добавить userId в JWT
                 Object roles = claims.get("roles");
+
+                // Извлекаем institutionIds и contractorIds из токена
+                Object institutions = claims.get("institutions");
+                Object contractors = claims.get("contractors");
 
                 log.debug("Token validated for user: {}, path: {}", username, path);
 
-                ServerHttpRequest mutatedRequest = request.mutate()
-                        .header("X-User-Id", username)
+                // Строим новые заголовки
+                ServerHttpRequest.Builder requestBuilder = request.mutate()
+                        .header("X-User-Id", userId)  // ← Здесь UUID, а не логин!
+                        .header("X-User-Name", username)  // Можно добавить и логин отдельно
                         .header("X-User-Roles", roles != null ? roles.toString() : "")
-                        .header("X-Authenticated", "true")
-                        .build();
+                        .header("X-Authenticated", "true");
+
+                // Добавляем institutionIds, если есть
+                if (institutions != null) {
+                    String instValue = institutions.toString();
+                    // Убираем квадратные скобки если есть
+                    instValue = instValue.replace("[", "").replace("]", "");
+                    requestBuilder.header("X-User-Institutions", instValue);
+                    log.debug("Added institutions header: {}", instValue);
+                }
+
+                // Добавляем contractorIds, если есть
+                if (contractors != null) {
+                    String contrValue = contractors.toString();
+                    // Убираем квадратные скобки если есть
+                    contrValue = contrValue.replace("[", "").replace("]", "");
+                    requestBuilder.header("X-User-Contractors", contrValue);
+                    log.debug("Added contractors header: {}", contrValue);
+                }
+
+                ServerHttpRequest mutatedRequest = requestBuilder.build();
 
                 return chain.filter(exchange.mutate().request(mutatedRequest).build());
 
@@ -88,11 +111,19 @@ public class JwtAuthenticationGatewayFilterFactory extends AbstractGatewayFilter
         };
     }
 
+    private boolean isPublicPath(String path) {
+        return path.startsWith("/api/auth/") ||
+                path.startsWith("/swagger-ui") ||
+                path.startsWith("/v3/api-docs") ||
+                path.startsWith("/actuator/health") ||
+                path.equals("/actuator/health");
+    }
+
     private Mono<Void> unauthorized(ServerWebExchange exchange, String message) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
         response.getHeaders().add("Content-Type", "application/json");
-        String body = String.format("{\"error\": \"%s\", \"timestamp\": \"%s\"}",
+        String body = String.format("{\"error\": \"%s\", \"status\": 401, \"timestamp\": \"%s\"}",
                 message, java.time.Instant.now());
         DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buffer));

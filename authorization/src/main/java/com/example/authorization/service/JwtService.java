@@ -12,10 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 
 @Slf4j
@@ -31,13 +28,24 @@ public class JwtService {
     @Value("${jwt.refresh-token-expiration:2592000000}")
     private Long refreshTokenExpiration;
 
-    public String generateAccessToken(UserDetails userDetails) {
+// В методе generateAccessToken добавьте institutionIds и contractorIds
+
+    public String generateAccessToken(UserDetails userDetails, List<Integer> institutionIds, List<Integer> contractorIds, UUID userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("roles", userDetails.getAuthorities());
         claims.put("type", "access");
         claims.put("jti", UUID.randomUUID().toString());
+        claims.put("institutions", institutionIds != null ? institutionIds : List.of());
+        claims.put("contractors", contractorIds != null ? contractorIds : List.of());
+        claims.put("userId", userId.toString());  // Добавляем userId в токен!
 
         return generateToken(claims, userDetails.getUsername(), accessTokenExpiration);
+    }
+
+    // Старый метод оставьте для обратной совместимости
+// В JwtService.java - оставьте для совместимости
+    public String generateAccessToken(UserDetails userDetails) {
+        return generateAccessToken(userDetails, List.of(), List.of(), UUID.randomUUID());
     }
 
     public String generateRefreshToken(UserDetails userDetails) {

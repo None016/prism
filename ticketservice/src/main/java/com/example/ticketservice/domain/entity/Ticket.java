@@ -33,9 +33,6 @@ public class Ticket {
     @JoinColumn(name = "id_type", nullable = false)
     private TypeTicket typeTicket;
 
-    @Column(name = "id_institution")
-    private Integer idInstitution;
-
     @Column(name = "id_contractor")
     private Integer idContractor;
 
@@ -61,6 +58,15 @@ public class Ticket {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "ditional_fields", columnDefinition = "jsonb")
     private JsonNode ditionalFields;
+
+    // Поле для хранения ID учреждения (для вставки/обновления)
+    @Column(name = "id_institution")
+    private Integer idInstitution;
+
+    // Поле для связи с сущностью (только для чтения)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_institution", insertable = false, updatable = false)
+    private Institution institution;
 
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
