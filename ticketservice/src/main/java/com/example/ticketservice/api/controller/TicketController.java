@@ -3,7 +3,9 @@ package com.example.ticketservice.api.controller;
 import com.example.ticketservice.api.dto.TicketCreateRequest;
 import com.example.ticketservice.api.dto.TicketResponse;
 import com.example.ticketservice.api.dto.TicketUpdateRequest;
+import com.example.ticketservice.domain.entity.StatusTicket;
 import com.example.ticketservice.domain.entity.Ticket;
+import com.example.ticketservice.domain.repository.StatusTicketRepository;
 import com.example.ticketservice.domain.repository.TicketRepository;
 import com.example.ticketservice.domain.repository.TicketSpecification;
 import com.example.ticketservice.domain.service.TicketService;
@@ -43,6 +45,7 @@ public class TicketController {
     private final TicketService ticketService;
     private final TicketRepository ticketRepository;
     private final TicketMapper ticketMapper;
+    private final StatusTicketRepository statusTicketRepository;
 
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
             "timeRequest", "timeUpdate", "priority", "title", "uuid"
@@ -55,10 +58,32 @@ public class TicketController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Получить заявку по ID")
-    @GetMapping("/{uuid}")
-    public ResponseEntity<TicketResponse> getTicketById(@PathVariable UUID uuid) {
-        return ResponseEntity.ok(ticketService.getTicketById(uuid));
+    @GetMapping("/{ticketId}")
+    @Operation(summary = "Получить заявку по UUID", description = "Используется workflow-service")
+    public ResponseEntity<TicketResponse> getTicketById(@PathVariable UUID ticketId) {
+        log.info("📥 Getting ticket by ID: {}", ticketId);
+
+        Ticket ticket = ticketRepository.findByUuid(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found: " + ticketId));
+
+        // ✅ Правильно маппим status из StatusTicket в Integer
+        Integer statusId = null;
+        if (ticket.getStatus() != null) {
+            statusId = ticket.getStatus().getId();
+        }
+
+        TicketResponse response = TicketResponse.builder()
+                .uuid(ticket.getUuid())
+                .status(statusId)  // ✅ Теперь это Integer, а не объект
+                .idContractor(ticket.getIdContractor())
+                .idInstitution(ticket.getIdInstitution())
+                .title(ticket.getTitle())
+                .notes(ticket.getNotes())
+                .priority(ticket.getPriority())
+                .build();
+
+        log.info("✅ Ticket retrieved: uuid={}, status={}", ticket.getUuid(), statusId);
+        return ResponseEntity.ok(response);
     }
 
     @Operation(summary = "Список заявок с фильтрацией")
@@ -112,6 +137,37 @@ public class TicketController {
     public ResponseEntity<Void> deleteTicket(@PathVariable UUID uuid) {
         ticketService.deleteTicket(uuid);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{ticketId}/status")
+    @Operation(summary = "Обновить статус заявки", description = "Используется workflow-service для изменения статуса")
+    public ResponseEntity<Void> updateTicketStatus(
+            @PathVariable UUID ticketId,
+            @RequestParam Integer status
+    ) {
+        log.info("🔄 Updating ticket status: ticketId={}, newStatus={}", ticketId, status);
+
+        // 1. Находим заявку
+        Ticket ticket = ticketRepository.findByUuid(ticketId)
+                .orElseThrow(() -> new RuntimeException("Ticket not found: " + ticketId));
+
+        // 2. ✅ Загружаем StatusTicket из БД по ID
+        StatusTicket newStatus = statusTicketRepository.findById(status)
+                .orElseThrow(() -> new RuntimeException("Status not found: " + status));
+
+        // 3. Устанавливаем статус
+        ticket.setStatus(newStatus);
+        ticket.setTimeUpdate(Instant.now());
+
+        // 4. Если статус "Закрыта" (id=5), устанавливаем время закрытия
+        if (status == 5) {
+            ticket.setTimeClosing(Instant.now());
+        }
+
+        ticketRepository.save(ticket);
+
+        log.info("✅ Ticket status updated: ticketId={}, newStatus={}", ticketId, newStatus.getNameType());
+        return ResponseEntity.ok().build();
     }
 
     private Pageable buildPageable(int page, int size, String sort) {

@@ -5,7 +5,6 @@ import com.example.authorization.dto.LoginResponse;
 import com.example.authorization.dto.RegisterRequest;
 import com.example.authorization.model.Contractor;
 import com.example.authorization.model.Role;
-import com.example.authorization.model.UserContractor;
 import com.example.authorization.model.Users;
 import com.example.authorization.repository.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,9 +41,9 @@ public class AuthService {
     private final UserContractorRepository userContractorRepository;
     private final UserInstitutionRepository userInstitutionRepository;
 
+    // ✅ МЕТОД REGISTER - ДОЛЖЕН БЫТЬ!
     @Transactional
     public String register(RegisterRequest request, HttpServletRequest httpRequest) {
-        // Проверка на существование
         if (usersRepository.existsByLogin(request.getLogin())) {
             log.warn("Registration failed: login {} already exists", request.getLogin());
             return "Login already exists!";
@@ -55,7 +54,6 @@ public class AuthService {
             return "Email already exists!";
         }
 
-        // Получаем или создаём роль USER по умолчанию
         Role userRole = roleRepository.findByNameRole("ROLE_USER")
                 .orElseGet(() -> {
                     log.info("Creating default ROLE_USER");
@@ -65,14 +63,12 @@ public class AuthService {
                     return roleRepository.save(newRole);
                 });
 
-        // Получаем контрагента, если указан
         Contractor contractor = null;
         if (request.getContractorId() != null) {
             contractor = contractorRepository.findById(request.getContractorId())
-                    .orElse(null); // или throw exception
+                    .orElse(null);
         }
 
-        // Создаём пользователя
         Users user = Users.builder()
                 .name(request.getName())
                 .surname(request.getSurname())
@@ -102,6 +98,7 @@ public class AuthService {
         return "User registered successfully!";
     }
 
+    // ✅ МЕТОД LOGIN
     public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest) {
         log.info("=== LOGIN START ===");
         log.info("Login attempt for user: {}", request.getLogin());
@@ -114,10 +111,8 @@ public class AuthService {
             log.info("Step 1: Authentication successful");
 
             log.info("Step 2: Loading user details...");
-            // Получаем userDetails из authentication
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-            // Получаем пользователя из БД для дополнительной информации
             Users user = usersRepository.findByLogin(request.getLogin())
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -132,7 +127,6 @@ public class AuthService {
             log.info("Contractors: {}", contractorIds);
 
             log.info("Step 5: Generating access token...");
-            // В методе login, при генерации токена:
             String accessToken = jwtService.generateAccessToken(userDetails, institutionIds, contractorIds, user.getUuid());
             log.info("Step 5: Access token generated");
 
@@ -154,7 +148,6 @@ public class AuthService {
 
             log.info("=== LOGIN END SUCCESS ===");
 
-            // Публикуем событие
             Map<String, Object> metadata = Map.of(
                     "ip", httpRequest.getRemoteAddr(),
                     "userAgent", httpRequest.getHeader("User-Agent")
@@ -175,6 +168,7 @@ public class AuthService {
         }
     }
 
+    // ✅ ИСПРАВЛЕННЫЙ МЕТОД REFRESH - теперь добавляет contractors и institutions
     public LoginResponse refresh(String refreshToken) {
         log.info("=== REFRESH START ===");
         try {
@@ -190,10 +184,32 @@ public class AuthService {
             refreshTokenService.deleteRefreshToken(refreshToken);
 
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            String newAccessToken = jwtService.generateAccessToken(userDetails);
+
+            // ✅ ДОБАВЛЕНО: Загружаем пользователя из БД для получения contractors/institutions
+            Users user = usersRepository.findByLogin(username)
+                    .orElseThrow(() -> new RuntimeException("User not found during refresh"));
+
+            log.info("Getting user institutions for refresh...");
+            List<Integer> institutionIds = userInstitutionRepository.findInstitutionIdsByUserId(user.getUuid());
+            log.info("Institutions for refresh: {}", institutionIds);
+
+            log.info("Getting user contractors for refresh...");
+            List<Integer> contractorIds = userContractorRepository.findContractorIdsByUserId(user.getUuid());
+            log.info("Contractors for refresh: {}", contractorIds);
+
+            // ✅ ИСПРАВЛЕНО: Используем ПОЛНЫЙ метод с institutionIds и contractorIds
+            String newAccessToken = jwtService.generateAccessToken(
+                    userDetails,
+                    institutionIds,
+                    contractorIds,
+                    user.getUuid()
+            );
             String newRefreshToken = jwtService.generateRefreshToken(userDetails);
 
             refreshTokenService.saveRefreshToken(newRefreshToken, username);
+
+            log.info("✅ New access token generated with institutions: {}, contractors: {}",
+                    institutionIds, contractorIds);
 
             return LoginResponse.builder()
                     .accessToken(newAccessToken)
@@ -209,16 +225,13 @@ public class AuthService {
         }
     }
 
-    /**
-     * ✅ Выход из системы — добавляем токен в черный список
-     */
+    // ✅ МЕТОД LOGOUT
     public void logout(String accessToken) {
         log.info("=== LOGOUT START ===");
         try {
             if (accessToken != null && !accessToken.isEmpty()) {
                 blacklistService.addToBlacklist(accessToken);
 
-                // Извлекаем username для логирования
                 try {
                     String username = jwtService.extractUsername(accessToken);
                     eventPublisher.publishUserLoggedOut(username, username);
@@ -234,25 +247,17 @@ public class AuthService {
         }
     }
 
-    /**
-     * ✅ Блокировка пользователя (для ADMIN)
-     */
+    // ✅ МЕТОДЫ ДЛЯ АДМИНА
     public void blockUser(String username) {
         blacklistService.addUserToBlacklist(username);
         log.info("User blocked: {}", username);
     }
 
-    /**
-     * ✅ Глобальная блокировка всех токенов
-     */
     public void activateGlobalBlacklist() {
         blacklistService.addGlobalBlacklist();
         log.warn("GLOBAL BLACKLIST ACTIVATED by admin");
     }
 
-    /**
-     * ✅ Деактивация глобальной блокировки
-     */
     public void deactivateGlobalBlacklist() {
         blacklistService.removeGlobalBlacklist();
         log.info("Global blacklist deactivated");

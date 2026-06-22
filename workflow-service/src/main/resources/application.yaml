@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: workflow-service
+
+  cloud:
+    compatibility-verifier:
+      enabled: false  # ✅ Отключаем проверку совместимости
+
+  datasource:
+    url: jdbc:postgresql://80.93.62.239:5432/prism
+    username: postgres
+    password: 12Hiro0016
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: workflow-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+server:
+  port: 8083
+
+jwt:
+  public-key-path: classpath:keys/public.pem
+  private-key-path: classpath:keys/private.pem
+
+logging:
+  level:
+    com.example.workflowservice: DEBUG
+    org.springframework.security: DEBUG

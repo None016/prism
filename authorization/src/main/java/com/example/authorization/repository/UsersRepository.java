@@ -25,4 +25,6 @@ public interface UsersRepository extends JpaRepository<Users, UUID> {
 
     @Query("SELECT u FROM Users u LEFT JOIN FETCH u.contractors WHERE u.uuid = :uuid")
     Optional<Users> findByUuidWithContractors(@Param("uuid") UUID uuid);
+
+    Optional<Users> findByUuid(UUID uuid);
 }
