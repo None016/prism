@@ -1,8 +1,8 @@
 package com.example.ticketservice.domain.repository;
 
 import com.example.ticketservice.domain.entity.Ticket;
-import jakarta.persistence.criteria.JoinType;
-import jakarta.persistence.criteria.Predicate;
+import com.example.ticketservice.domain.entity.TicketAssignment;
+import jakarta.persistence.criteria.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -46,12 +46,10 @@ public class TicketSpecification {
             switch (roleUpper) {
                 case "ROLE_ROOT":
                 case "ROLE_ADMIN":
-                    // Админ - видит всё
                     log.debug("Admin access - no restrictions");
                     break;
 
                 case "ROLE_MANAGER":
-                    // Менеджер - видит заявки учреждений, к которым привязан
                     if (userInstitutionIds != null && !userInstitutionIds.isEmpty()) {
                         predicates.add(root.get("idInstitution").in(userInstitutionIds));
                         log.debug("Manager access - institutions: {}", userInstitutionIds);
@@ -62,10 +60,11 @@ public class TicketSpecification {
                     break;
 
                 case "ROLE_EXECUTOR":
-                    // Исполнитель:
-                    // 1. НЕ ВИДИТ заявки со статусом "Создана" (id = 1)
-                    // 2. Видит заявки, где он является исполнителем (id_contractor в его списке)
-                    // 3. Видит свободные назначенные заявки (статус "Назначена" без исполнителя)
+                    if (userId == null) {
+                        log.warn("Executor has no userId!");
+                        predicates.add(criteriaBuilder.disjunction());
+                        break;
+                    }
 
                     if (userContractorIds == null || userContractorIds.isEmpty()) {
                         log.warn("Executor {} has no contractors assigned!", userId);
@@ -73,32 +72,62 @@ public class TicketSpecification {
                         break;
                     }
 
-                    // Заявки, где исполнитель = пользователь (через contractor)
-                    Predicate assignedToUser = root.get("idContractor").in(userContractorIds);
+                    // ✅ 1. Заявки со статусом "Назначена" (2), где исполнитель = пользователь (через contractor)
+                    Predicate assignedToUserByContractor = criteriaBuilder.and(
+                            criteriaBuilder.equal(root.get("status").get("id"), STATUS_ASSIGNED),
+                            root.get("idContractor").in(userContractorIds)
+                    );
 
-                    // Свободные заявки со статусом "Назначена" (ждут исполнителя)
+                    // ✅ 2. Свободные заявки со статусом "Назначена" (2) без исполнителя
                     Predicate freeAssigned = criteriaBuilder.and(
                             criteriaBuilder.equal(root.get("status").get("id"), STATUS_ASSIGNED),
                             criteriaBuilder.isNull(root.get("idContractor"))
                     );
 
-                    // НЕ ПОКАЗЫВАТЬ заявки со статусом "Создана"
-                    Predicate notCreated = criteriaBuilder.notEqual(
-                            root.get("status").get("id"), STATUS_CREATED
+                    // ✅ 3. Заявки со статусом "В работе" (3), где пользователь назначен через ticket_assignment
+                    Subquery<UUID> subqueryInProgress = query.subquery(UUID.class);
+                    Root<TicketAssignment> assignmentRootInProgress = subqueryInProgress.from(TicketAssignment.class);
+                    subqueryInProgress.select(assignmentRootInProgress.get("idTicket"));
+                    subqueryInProgress.where(
+                            criteriaBuilder.equal(assignmentRootInProgress.get("idUser"), userId)
                     );
 
-                    // Комбинируем: (назначены пользователю ИЛИ свободные) И не созданы
-                    predicates.add(criteriaBuilder.and(
-                            criteriaBuilder.or(assignedToUser, freeAssigned),
-                            notCreated
+                    Predicate inProgressAssigned = criteriaBuilder.and(
+                            criteriaBuilder.equal(root.get("status").get("id"), STATUS_IN_PROGRESS),
+                            root.get("uuid").in(subqueryInProgress)
+                    );
+
+                    // ✅ 4. Заявки со статусом "Закрыта" (5), где пользователь назначен через ticket_assignment
+                    Subquery<UUID> subqueryClosed = query.subquery(UUID.class);
+                    Root<TicketAssignment> assignmentRootClosed = subqueryClosed.from(TicketAssignment.class);
+                    subqueryClosed.select(assignmentRootClosed.get("idTicket"));
+                    subqueryClosed.where(
+                            criteriaBuilder.equal(assignmentRootClosed.get("idUser"), userId)
+                    );
+
+                    Predicate closedAssigned = criteriaBuilder.and(
+                            criteriaBuilder.equal(root.get("status").get("id"), STATUS_CLOSED),
+                            root.get("uuid").in(subqueryClosed)
+                    );
+
+                    // ✅ Комбинируем все условия:
+                    // (Назначена И (назначен ИЛИ свободна))
+                    // ИЛИ (В работе И назначен)
+                    // ИЛИ (Закрыта И назначен)
+                    predicates.add(criteriaBuilder.or(
+                            criteriaBuilder.and(
+                                    criteriaBuilder.equal(root.get("status").get("id"), STATUS_ASSIGNED),
+                                    criteriaBuilder.or(assignedToUserByContractor, freeAssigned)
+                            ),
+                            inProgressAssigned,
+                            closedAssigned
                     ));
 
-                    log.debug("Executor access - user can see tickets assigned to contractors: {}, or free assigned tickets, but NOT CREATED",
-                            userContractorIds);
+                    log.debug("Executor access - userId: {}, contractors: {}, logic: ASSIGNED (assigned OR free) OR IN_PROGRESS (assigned) OR CLOSED (assigned)",
+                            userId, userContractorIds);
                     break;
 
                 default:
-                    // Обычный пользователь - не видит ничего
                     log.warn("Default user {} has no role - seeing no tickets", userId);
                     predicates.add(criteriaBuilder.disjunction());
                     break;
@@ -108,6 +137,9 @@ public class TicketSpecification {
         };
     }
 
+    /**
+     * ✅ СТАРЫЙ метод — для обратной совместимости (с одиночным statusId)
+     */
     public static Specification<Ticket> filterWithParams(
             String role,
             UUID userId,
@@ -120,13 +152,39 @@ public class TicketSpecification {
             Instant dateTo,
             Integer priorityMin
     ) {
+        // Оборачиваем одиночный statusId в список
+        List<Integer> statusIds = statusId != null ? List.of(statusId) : null;
+        return filterWithParams(
+                role, userId, userInstitutionIds, userContractorIds,
+                statusIds, typeId, institutionId, dateFrom, dateTo, priorityMin
+        );
+    }
+
+    /**
+     * ✅ НОВЫЙ метод — с поддержкой списка статусов
+     */
+    public static Specification<Ticket> filterWithParams(
+            String role,
+            UUID userId,
+            List<Integer> userInstitutionIds,
+            List<Integer> userContractorIds,
+            List<Integer> statusIds,          // ✅ Список статусов
+            Integer typeId,
+            Integer institutionId,
+            Instant dateFrom,
+            Instant dateTo,
+            Integer priorityMin
+    ) {
         return Specification.where(filterByRole(role, userId, userInstitutionIds, userContractorIds))
                 .and((root, query, cb) -> {
                     List<Predicate> predicates = new ArrayList<>();
 
-                    if (statusId != null) {
-                        predicates.add(cb.equal(root.get("status").get("id"), statusId));
+                    // ✅ Фильтрация по списку статусов
+                    if (statusIds != null && !statusIds.isEmpty()) {
+                        predicates.add(root.get("status").get("id").in(statusIds));
+                        log.debug("Filtering by statusIds: {}", statusIds);
                     }
+
                     if (typeId != null) {
                         predicates.add(cb.equal(root.get("typeTicket").get("id"), typeId));
                     }
@@ -145,5 +203,53 @@ public class TicketSpecification {
 
                     return cb.and(predicates.toArray(new Predicate[0]));
                 });
+    }
+
+    public static Specification<Ticket> forManager(
+            Integer contractorId,
+            List<Integer> statusIds,
+            Integer priorityMin,
+            Instant dateFrom,
+            Instant dateTo,
+            UUID executorId
+    ) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            // Базовые условия
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+            predicates.add(cb.equal(root.get("idContractor"), contractorId));
+
+            // Фильтр по статусам
+            if (statusIds != null && !statusIds.isEmpty()) {
+                predicates.add(root.get("status").get("id").in(statusIds));
+            }
+
+            // Фильтр по приоритету
+            if (priorityMin != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("priority"), priorityMin));
+            }
+
+            // Фильтр по дате от
+            if (dateFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("timeRequest"), dateFrom));
+            }
+
+            // Фильтр по дате до
+            if (dateTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("timeRequest"), dateTo));
+            }
+
+            // Фильтр по исполнителю (через ticket_assignment)
+            if (executorId != null) {
+                Subquery<UUID> subquery = query.subquery(UUID.class);
+                Root<TicketAssignment> assignmentRoot = subquery.from(TicketAssignment.class);
+                subquery.select(assignmentRoot.get("idTicket"));
+                subquery.where(cb.equal(assignmentRoot.get("idUser"), executorId));
+                predicates.add(root.get("uuid").in(subquery));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 }

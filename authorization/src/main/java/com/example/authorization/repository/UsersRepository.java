@@ -2,6 +2,7 @@
 package com.example.authorization.repository;
 
 import com.example.authorization.model.Users;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,6 +26,11 @@ public interface UsersRepository extends JpaRepository<Users, UUID> {
 
     @Query("SELECT u FROM Users u LEFT JOIN FETCH u.contractors WHERE u.uuid = :uuid")
     Optional<Users> findByUuidWithContractors(@Param("uuid") UUID uuid);
+
+    // ✅ НОВЫЙ МЕТОД: загрузка пользователя с учреждениями и подрядчиками
+    @EntityGraph(attributePaths = {"institutions", "contractors", "role"})
+    @Query("SELECT u FROM Users u WHERE u.login = :login")
+    Optional<Users> findByLoginWithInstitutionsAndContractors(@Param("login") String login);
 
     Optional<Users> findByUuid(UUID uuid);
 }

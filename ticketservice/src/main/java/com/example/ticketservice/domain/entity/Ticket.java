@@ -7,6 +7,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -70,5 +71,8 @@ public class Ticket {
 
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;
+
+    @OneToMany(mappedBy = "ticket", fetch = FetchType.LAZY)
+    private List<TicketAssignment> ticketAssignments;
 
 }

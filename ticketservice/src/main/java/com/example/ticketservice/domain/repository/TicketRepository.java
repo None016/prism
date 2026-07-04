@@ -7,6 +7,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -17,7 +19,6 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID>, JpaSpecif
 
     @Override
     @EntityGraph(attributePaths = {"typeTicket", "status", "institution"})
-        // Убираем "institution.typeInstitution" - его нет в Ticket!
     Page<Ticket> findAll(Specification<Ticket> spec, Pageable pageable);
 
     @Override
@@ -26,4 +27,7 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID>, JpaSpecif
 
     @EntityGraph(attributePaths = {"typeTicket", "status", "institution"})
     Optional<Ticket> findByUuid(UUID uuid);
+
+    @Query("SELECT t FROM Ticket t WHERE t.idContractor = :contractorId AND t.isDeleted = false")
+    Page<Ticket> findByContractorId(@Param("contractorId") Integer contractorId, Pageable pageable);
 }

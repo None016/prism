@@ -42,7 +42,7 @@ public class WorkflowController {
      * Взять заявку в работу (только для исполнителей)
      */
     @PostMapping("/take-to-work")
-    @PreAuthorize("hasAuthority('ROLE_EXECUTOR')")
+    @PreAuthorize("hasAnyAuthority('ROLE_EXECUTOR', 'ROLE_MANAGER')")
     public ResponseEntity<WorkflowResponse> takeToWork(
             @Valid @RequestBody TicketActionRequest request,
             Authentication authentication  // ✅ Используем Authentication

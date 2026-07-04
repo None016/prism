@@ -20,8 +20,9 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 import java.security.PublicKey;
 import java.util.List;
+import java.util.stream.Collectors;
 
-@Component  // ✅ Важно!
+@Component
 public class JwtAuthenticationFilter implements GatewayFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
@@ -36,6 +37,7 @@ public class JwtAuthenticationFilter implements GatewayFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
+        // Пропускаем публичные endpoints
         if (path.startsWith("/api/auth/") ||
                 path.startsWith("/swagger-ui") ||
                 path.startsWith("/v3/api-docs") ||
@@ -68,13 +70,35 @@ public class JwtAuthenticationFilter implements GatewayFilter, Ordered {
             String username = claims.getSubject();
             Object roles = claims.get("roles");
 
-            log.debug("Token validated for user: {}, path: {}", username, path);
+            // ✅ ИЗВЛЕКАЕМ contractors и institutions из JWT
+            Object contractors = claims.get("contractors");
+            Object institutions = claims.get("institutions");
 
-            ServerHttpRequest mutatedRequest = request.mutate()
+            // Формируем строковые представления для заголовков
+            String contractorsHeader = extractIdsAsString(contractors);
+            String institutionsHeader = extractIdsAsString(institutions);
+            String rolesHeader = roles != null ? roles.toString() : "";
+
+            log.debug("Token validated - user: {}, roles: {}, contractors: {}, institutions: {}, path: {}",
+                    username, rolesHeader, contractorsHeader, institutionsHeader, path);
+
+            // ✅ ФОРМИРУЕМ ЗАГОЛОВКИ
+            ServerHttpRequest.Builder requestBuilder = request.mutate()
                     .header("X-User-Id", username)
-                    .header("X-User-Roles", roles != null ? roles.toString() : "")
-                    .header("X-Authenticated", "true")
-                    .build();
+                    .header("X-User-Roles", rolesHeader)
+                    .header("X-Authenticated", "true");
+
+            // ✅ ДОБАВЛЯЕМ contractors если есть
+            if (!contractorsHeader.isEmpty()) {
+                requestBuilder.header("X-User-Contractors", contractorsHeader);
+            }
+
+            // ✅ ДОБАВЛЯЕМ institutions если есть
+            if (!institutionsHeader.isEmpty()) {
+                requestBuilder.header("X-User-Institutions", institutionsHeader);
+            }
+
+            ServerHttpRequest mutatedRequest = requestBuilder.build();
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
 
@@ -82,6 +106,40 @@ public class JwtAuthenticationFilter implements GatewayFilter, Ordered {
             log.error("JWT validation failed for path {}: {}", path, e.getMessage());
             return unauthorized(exchange, "Invalid or expired token: " + e.getMessage());
         }
+    }
+
+    /**
+     * ✅ Универсальный метод извлечения ID из JWT claims
+     * Поддерживает:
+     * - List<Integer> → "1,2,3"
+     * - List<String> → "1,2,3"
+     * - String "1,2,3" → "1,2,3"
+     * - Integer → "1"
+     * - null → ""
+     */
+    private String extractIdsAsString(Object value) {
+        if (value == null) {
+            return "";
+        }
+
+        // Если это список (самый частый случай)
+        if (value instanceof List) {
+            List<?> list = (List<?>) value;
+            if (list.isEmpty()) {
+                return "";
+            }
+            return list.stream()
+                    .map(Object::toString)
+                    .collect(Collectors.joining(","));
+        }
+
+        // Если это строка
+        if (value instanceof String) {
+            return (String) value;
+        }
+
+        // Если это число
+        return value.toString();
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, String message) {

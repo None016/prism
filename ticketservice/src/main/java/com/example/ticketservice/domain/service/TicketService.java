@@ -9,10 +9,7 @@ import com.example.ticketservice.config.TicketProperties;
 import com.example.ticketservice.domain.entity.StatusTicket;
 import com.example.ticketservice.domain.entity.Ticket;
 import com.example.ticketservice.domain.entity.TypeTicket;
-import com.example.ticketservice.domain.repository.StatusTicketRepository;
-import com.example.ticketservice.domain.repository.TicketRepository;
-import com.example.ticketservice.domain.repository.TicketSpecification;
-import com.example.ticketservice.domain.repository.TypeTicketRepository;
+import com.example.ticketservice.domain.repository.*;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +32,8 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final TypeTicketRepository typeTicketRepository;
     private final StatusTicketRepository statusTicketRepository;
+    private final InstitutionRepository institutionRepository; // ✅ ДОБАВЛЕНО
+    private final ContractorRepository contractorRepository;   // ✅ ДОБАВЛЕНО
     private final TicketMapper ticketMapper;
     private final TicketProperties ticketProperties;
 
@@ -48,26 +47,26 @@ public class TicketService {
             throw new IllegalArgumentException("Поле 'Где произошла заявка' (idInstitution) является обязательным.");
         }
 
-        // Проверяем существование типа заявки - 404
+        // Проверяем существование типа заявки
         TypeTicket typeTicket = typeTicketRepository.findById(request.getIdType())
                 .orElseThrow(() -> new EntityNotFoundException("Тип заявки с id=" + request.getIdType() + " не найден"));
 
-        // Проверяем существование статуса - 404
+        // Проверяем существование статуса
         Integer statusId = request.getStatus() != null ? request.getStatus() : ticketProperties.getDefaultStatusId();
         StatusTicket status = statusTicketRepository.findById(statusId)
                 .orElseThrow(() -> new EntityNotFoundException("Статус заявки с id=" + statusId + " не найден"));
 
-        // Проверяем существование учреждения - 404
-        if (!isInstitutionExists(request.getIdInstitution())) {
+        // ✅ РЕАЛЬНАЯ проверка существования учреждения
+        if (!institutionRepository.existsById(request.getIdInstitution())) {
             throw new EntityNotFoundException("Учреждение с id=" + request.getIdInstitution() + " не найдено");
         }
 
-        // Проверяем существование контрагента - 404
-        if (request.getIdContractor() != null && !isContractorExists(request.getIdContractor())) {
+        // ✅ РЕАЛЬНАЯ проверка существования контрагента
+        if (request.getIdContractor() != null && !contractorRepository.existsById(request.getIdContractor())) {
             throw new EntityNotFoundException("Контрагент с id=" + request.getIdContractor() + " не найден");
         }
 
-        // Создаем заявку - маппер сам замаппит ditionalFields
+        // Создаем заявку
         Ticket ticket = ticketMapper.toEntity(request);
         ticket.setUuid(ticketMapper.generateUuid());
         ticket.setTimeRequest(Instant.now());
@@ -96,13 +95,13 @@ public class TicketService {
             ticket.setNotes(request.getNotes());
         }
         if (request.getIdInstitution() != null) {
-            if (!isInstitutionExists(request.getIdInstitution())) {
+            if (!institutionRepository.existsById(request.getIdInstitution())) {
                 throw new EntityNotFoundException("Учреждение с id=" + request.getIdInstitution() + " не найдено");
             }
             ticket.setIdInstitution(request.getIdInstitution());
         }
         if (request.getIdContractor() != null) {
-            if (!isContractorExists(request.getIdContractor())) {
+            if (!contractorRepository.existsById(request.getIdContractor())) {
                 throw new EntityNotFoundException("Контрагент с id=" + request.getIdContractor() + " не найден");
             }
             ticket.setIdContractor(request.getIdContractor());
@@ -118,7 +117,6 @@ public class TicketService {
                     .orElseThrow(() -> new EntityNotFoundException("Тип заявки с id=" + request.getIdType() + " не найден"));
             ticket.setTypeTicket(typeTicket);
         }
-
 
         ticket.setTimeUpdate(Instant.now());
 
@@ -185,25 +183,6 @@ public class TicketService {
         }
     }
 
-    private boolean isInstitutionExists(Integer institutionId) {
-        if (institutionId == null) return false;
-        // TODO: Вызвать API Institution Service через FeignClient
-        // ВРЕМЕННАЯ ЗАГЛУШКА для тестирования - проверяем через прямые запросы в БД
-        // Нужно заменить на реальный вызов другого сервиса
-        try {
-            // Временное решение: проверяем через прямой SQL или заглушку
-            // Для демо: считаем что существуют id от 1 до 100
-            return institutionId >= 1 && institutionId <= 100;
-        } catch (Exception e) {
-            log.error("Error checking institution existence: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    private boolean isContractorExists(Integer contractorId) {
-        if (contractorId == null) return true;
-        // TODO: Вызвать Contractor Service
-        // ВРЕМЕННАЯ ЗАГЛУШКА для тестирования
-        return contractorId >= 1 && contractorId <= 100;
-    }
+    // ✅ УДАЛЕНЫ заглушки isInstitutionExists и isContractorExists
+    // Теперь используются прямые вызовы repository.existsById()
 }

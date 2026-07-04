@@ -53,7 +53,17 @@ public class TicketController {
 
     @Operation(summary = "Создать новую заявку")
     @PostMapping
-    public ResponseEntity<TicketResponse> createTicket(@Valid @RequestBody TicketCreateRequest request) {
+    public ResponseEntity<TicketResponse> createTicket(
+            @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
+            @Valid @RequestBody TicketCreateRequest request) {
+
+        // ✅ Проверка: исполнители не могут создавать заявки
+        if (rolesHeader != null && rolesHeader.contains("ROLE_EXECUTOR")) {
+            log.warn("Executor attempted to create a ticket");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(null); // или бросить исключение
+        }
+
         TicketResponse response = ticketService.createTicket(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -93,7 +103,13 @@ public class TicketController {
             @RequestHeader(value = "X-User-Roles", required = false) String rolesHeader,
             @RequestHeader(value = "X-User-Institutions", required = false) String institutionsHeader,
             @RequestHeader(value = "X-User-Contractors", required = false) String contractorsHeader,
+
+            // ✅ НОВОЕ: поддержка списка статусов
+            @RequestParam(required = false) List<Integer> statusIds,
+
+            // ✅ СТАРОЕ: одиночный статус (для обратной совместимости)
             @RequestParam(required = false) @Min(1) Integer statusId,
+
             @RequestParam(required = false) @Min(1) Integer typeId,
             @RequestParam(required = false) @Min(1) Integer priorityMin,
             @RequestParam(required = false) @Min(1) Integer institutionId,
@@ -109,17 +125,22 @@ public class TicketController {
         List<Integer> userInstitutionIds = parseIds(institutionsHeader);
         List<Integer> userContractorIds = parseIds(contractorsHeader);
 
-        log.info("User {} with role {} - institutions: {}, contractors: {}",
-                userId, role, userInstitutionIds, userContractorIds);
+        // ✅ Если передан одиночный statusId — используем его, иначе список
+        List<Integer> effectiveStatusIds = statusIds;
+        if ((effectiveStatusIds == null || effectiveStatusIds.isEmpty()) && statusId != null) {
+            effectiveStatusIds = List.of(statusId);
+        }
+
+        log.info("User {} with role {} - institutions: {}, contractors: {}, statusIds: {}",
+                userId, role, userInstitutionIds, userContractorIds, effectiveStatusIds);
 
         Specification<Ticket> spec = TicketSpecification.filterWithParams(
                 role, userId, userInstitutionIds, userContractorIds,
-                statusId, typeId, institutionId, dateFrom, dateTo, priorityMin
+                effectiveStatusIds, typeId, institutionId, dateFrom, dateTo, priorityMin
         );
 
         Pageable pageable = buildPageable(page, size, sort);
 
-        // Используем репозиторий напрямую
         Page<Ticket> tickets = ticketRepository.findAll(spec, pageable);
         return tickets.map(ticketMapper::toResponse);
     }

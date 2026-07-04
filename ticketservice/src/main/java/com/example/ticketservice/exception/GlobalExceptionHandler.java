@@ -1,6 +1,5 @@
 package com.example.ticketservice.exception;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.validation.ConstraintViolationException;
@@ -15,20 +14,59 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // ✅ ОБЪЕДИНЁННЫЙ обработчик для бизнес-исключений
+    @ExceptionHandler({IllegalStateException.class, IllegalArgumentException.class})
+    public ResponseEntity<Map<String, Object>> handleBusinessLogicException(RuntimeException ex) {
+        log.warn("Business logic error: {} - {}", ex.getClass().getSimpleName(), ex.getMessage());
+
+        HttpStatus status;
+        String errorType;
+
+        if (ex instanceof IllegalStateException) {
+            status = HttpStatus.CONFLICT;
+            errorType = "Conflict";
+        } else {
+            status = HttpStatus.BAD_REQUEST;
+            errorType = "Bad Request";
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", Instant.now());
+        body.put("status", status.value());
+        body.put("error", errorType);
+        body.put("message", ex.getMessage());
+
+        return ResponseEntity.status(status).body(body);
+    }
+
+    @ExceptionHandler(EntityNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleEntityNotFound(EntityNotFoundException ex) {
+        log.warn("Entity not found: {}", ex.getMessage());
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", Instant.now());
+        body.put("status", HttpStatus.NOT_FOUND.value());
+        body.put("error", "Not Found");
+        body.put("message", ex.getMessage());
+
+        return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleJsonParseException(HttpMessageNotReadableException ex) {
         log.error("JSON parsing error: {}", ex.getMessage());
 
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", Instant.now());
         body.put("status", HttpStatus.BAD_REQUEST.value());
         body.put("error", "Bad Request");
         body.put("message", "Неверный формат JSON. Проверьте синтаксис запроса.");
@@ -45,7 +83,7 @@ public class GlobalExceptionHandler {
         log.error("Validation error: {}", ex.getMessage());
 
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", Instant.now());
         body.put("status", HttpStatus.BAD_REQUEST.value());
         body.put("error", "Bad Request");
         body.put("message", "Ошибка валидации данных. Проверьте правильность заполнения полей.");
@@ -63,7 +101,7 @@ public class GlobalExceptionHandler {
         log.error("Constraint violation: {}", ex.getMessage());
 
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", Instant.now());
         body.put("status", HttpStatus.BAD_REQUEST.value());
         body.put("error", "Bad Request");
         body.put("message", "Ошибка валидации параметров запроса: " + ex.getMessage());
@@ -76,8 +114,8 @@ public class GlobalExceptionHandler {
         log.error("Data integrity violation: {}", ex.getMessage());
 
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.CONFLICT.value());  // 409 вместо 400
+        body.put("timestamp", Instant.now());
+        body.put("status", HttpStatus.CONFLICT.value());
         body.put("error", "Conflict");
 
         String message = "Ошибка целостности данных. Пожалуйста, проверьте корректность переданных идентификаторов.";
@@ -100,46 +138,15 @@ public class GlobalExceptionHandler {
         }
 
         body.put("message", message);
-        return new ResponseEntity<>(body, HttpStatus.CONFLICT);  // 409
+        return new ResponseEntity<>(body, HttpStatus.CONFLICT);
     }
 
-    @ExceptionHandler({
-            IllegalArgumentException.class,
-            IllegalStateException.class
-    })
-    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
-        log.error("Business logic error: {}", ex.getMessage());
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Bad Request");
-        body.put("message", ex.getMessage());
-
-        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
-    }
-
-    // ОБНОВЛЕННЫЙ обработчик для EntityNotFoundException - возвращает 404 с конкретным сообщением
-    @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleEntityNotFound(EntityNotFoundException ex) {
-        log.error("Entity not found: {}", ex.getMessage());
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.NOT_FOUND.value());
-        body.put("error", "Not Found");
-        body.put("message", ex.getMessage());  // Конкретное сообщение, а не общее
-
-        return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
-    }
-
-    // НОВЫЙ обработчик для optimistic lock - 409 Conflict
     @ExceptionHandler({ObjectOptimisticLockingFailureException.class, OptimisticLockException.class})
     public ResponseEntity<Map<String, Object>> handleOptimisticLockingFailure(Exception ex) {
         log.warn("Optimistic locking failure: {}", ex.getMessage());
 
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", Instant.now());
         body.put("status", HttpStatus.CONFLICT.value());
         body.put("error", "Conflict");
         body.put("message", "Заявка была изменена другим пользователем. Пожалуйста, обновите страницу и повторите попытку.");
@@ -152,7 +159,7 @@ public class GlobalExceptionHandler {
         log.error("Type mismatch: {}", ex.getMessage());
 
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", Instant.now());
         body.put("status", HttpStatus.BAD_REQUEST.value());
         body.put("error", "Bad Request");
         body.put("message", String.format("Неверный тип параметра '%s'. Ожидается: %s",
@@ -161,12 +168,13 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
 
+    // ✅ ЕДИНСТВЕННЫЙ обработчик для всех остальных исключений
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
         log.error("Unexpected error: ", ex);
 
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
+        body.put("timestamp", Instant.now());
         body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
         body.put("error", "Internal Server Error");
         body.put("message", "Произошла внутренняя ошибка сервера. Администратор уже уведомлен.");

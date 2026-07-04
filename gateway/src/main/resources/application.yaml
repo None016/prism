@@ -8,8 +8,23 @@ spring:
     gateway:
       server:
         webflux:
+          cors:
+            allowed-origins:
+              - "http://localhost:5173"
+              - "http://localhost:3000"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowed-headers:
+              - "*"
+            allow-credentials: true
+            max-age: 3600
           routes:
-            # 1. Auth service (без JWT - публичные эндпоинты)
+            # 1. Auth service (публичные)
             - id: auth-service
               uri: http://localhost:8081
               predicates:
@@ -19,31 +34,52 @@ spring:
             - id: user-service
               uri: http://localhost:8081
               predicates:
-                - Path=/api/users/**
+                - Path=/api/users/**, /api/users
               filters:
                 - JwtAuthentication
 
-            # 3. Ticket service
+            # 3. Ticket service - ПУБЛИЧНЫЕ endpoints (без JWT)
+            - id: ticket-public-service
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/v1/types, /api/v1/types/**, /api/v1/institutions, /api/v1/institutions/**, /api/v1/contractors, /api/v1/contractors/**
+
+            # 4. Ticket service - ЗАЩИЩЁННЫЕ endpoints (с JWT)
+            # ✅ ИСПРАВЛЕНО: добавлены точные пути без слэша
             - id: ticket-service
               uri: http://localhost:8082
               predicates:
-                - Path=/api/v1/tickets/**
+                - Path=/api/v1/tickets, /api/v1/tickets/**
               filters:
                 - JwtAuthentication
 
-            # 4. Workflow service (НОВЫЙ)
+            # ✅ НОВЫЙ маршрут для менеджера
+            - id: manager-service
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/v1/managers/**
+              filters:
+                - JwtAuthentication
+
+            # 5. Workflow service
             - id: workflow-service
               uri: http://localhost:8083
               predicates:
-                - Path=/api/v1/workflow/**
+                - Path=/api/v1/workflow, /api/v1/workflow/**
               filters:
                 - JwtAuthentication
 
-# JWT ключи
+            # 6. Document service
+            - id: document-service
+              uri: http://localhost:8084
+              predicates:
+                - Path=/api/v1/documents, /api/v1/documents/**
+              filters:
+                - JwtAuthentication
+
 jwt:
   public-key-path: classpath:keys/public.pem
 
-# Логирование
 logging:
   level:
     com.example.gateway: DEBUG

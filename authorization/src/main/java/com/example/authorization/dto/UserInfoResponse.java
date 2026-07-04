@@ -98,16 +98,14 @@ public class UserInfoResponse {
                 .birthDate(user.getBirthDate())
                 .role(user.getRole() != null ? user.getRole().getNameRole() : null);
 
-        // Добавляем список организаций через связь ManyToMany
-        if (user.getContractors() != null && !user.getContractors().isEmpty()) {
-            List<OrganizationInfo> orgs = user.getContractors().stream()
-                    .map(c -> OrganizationInfo.builder()
-                            .id(c.getId())
-                            .name(c.getName())
-                            .address(c.getAddress())
-                            .notes(c.getNotes())
-                            .startDate(c.getStartDate())
-                            .endDate(c.getEndDate())
+        // ✅ Добавляем список учреждений (institutions)
+        if (user.getInstitutions() != null && !user.getInstitutions().isEmpty()) {
+            List<OrganizationInfo> orgs = user.getInstitutions().stream()
+                    .map(inst -> OrganizationInfo.builder()
+                            .id(inst.getId())
+                            .name(inst.getName())
+                            .address(inst.getAddress())
+                            // ✅ УБРАЛИ: notes, startDate, endDate
                             .build())
                     .collect(Collectors.toList());
             builder.organizations(orgs);

@@ -12,11 +12,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
 @Table(name = "users")
@@ -67,6 +63,16 @@ public class Users implements UserDetails {
             inverseJoinColumns = @JoinColumn(name = "id_contractor")
     )
     private List<Contractor> contractors = new ArrayList<>();
+
+    // ✅ СВЯЗЬ С INSTITUTION (ManyToMany через user_institution)
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_institution",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "institution_id")
+    )
+    @Builder.Default
+    private Set<Institution> institutions = new HashSet<>();
 
     // ===== Реализация методов UserDetails =====
 
