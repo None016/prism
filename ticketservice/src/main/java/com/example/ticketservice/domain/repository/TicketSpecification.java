@@ -21,6 +21,68 @@ public class TicketSpecification {
     public static final int STATUS_RETURNED = 4;     // Возвращена
     public static final int STATUS_CLOSED = 5;       // Закрыта
 
+    // ===== ✅ НОВЫЙ МЕТОД: Для пользователя (ROLE_USER) =====
+
+    /**
+     * Спецификация для пользователя (ROLE_USER)
+     * Показывает заявки от его учреждений ИЛИ назначенные ему
+     */
+    public static Specification<Ticket> forUser(
+            UUID userId,
+            List<Integer> institutionIds,
+            List<Integer> statusIds,
+            Integer priorityMin,
+            Instant dateFrom,
+            Instant dateTo) {
+
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            // Базовое условие: не удалено
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+
+            // ✅ Пользователь видит заявки от своих учреждений ИЛИ назначенные ему
+            if (institutionIds != null && !institutionIds.isEmpty()) {
+                Join<Object, Object> assignmentJoin = root.join("ticketAssignments", JoinType.LEFT);
+                Predicate institutionPredicate = root.get("idInstitution").in(institutionIds);
+                Predicate userAssignmentPredicate = cb.equal(assignmentJoin.get("idUser"), userId);
+                predicates.add(cb.or(institutionPredicate, userAssignmentPredicate));
+            } else {
+                // Если нет учреждений, показываем только назначенные
+                Join<Object, Object> assignmentJoin = root.join("ticketAssignments", JoinType.INNER);
+                predicates.add(cb.equal(assignmentJoin.get("idUser"), userId));
+            }
+
+            // ✅ Фильтр по статусам — используем status.id (не status!)
+            if (statusIds != null && !statusIds.isEmpty()) {
+                predicates.add(root.get("status").get("id").in(statusIds));
+            }
+
+            // Фильтр по приоритету
+            if (priorityMin != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("priority"), priorityMin));
+            }
+
+            // Фильтр по дате от
+            if (dateFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("timeRequest"), dateFrom));
+            }
+
+            // Фильтр по дате до
+            if (dateTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("timeRequest"), dateTo));
+            }
+
+            // Сортировка по дате создания (новые сверху)
+            query.orderBy(cb.desc(root.get("timeRequest")));
+            query.distinct(true);
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    // ===== МЕТОДЫ ДЛЯ МЕНЕДЖЕРА =====
+
     public static Specification<Ticket> filterByRole(
             String role,
             UUID userId,
@@ -110,10 +172,7 @@ public class TicketSpecification {
                             root.get("uuid").in(subqueryClosed)
                     );
 
-                    // ✅ Комбинируем все условия:
-                    // (Назначена И (назначен ИЛИ свободна))
-                    // ИЛИ (В работе И назначен)
-                    // ИЛИ (Закрыта И назначен)
+                    // ✅ Комбинируем все условия
                     predicates.add(criteriaBuilder.or(
                             criteriaBuilder.and(
                                     criteriaBuilder.equal(root.get("status").get("id"), STATUS_ASSIGNED),
@@ -123,8 +182,7 @@ public class TicketSpecification {
                             closedAssigned
                     ));
 
-                    log.debug("Executor access - userId: {}, contractors: {}, logic: ASSIGNED (assigned OR free) OR IN_PROGRESS (assigned) OR CLOSED (assigned)",
-                            userId, userContractorIds);
+                    log.debug("Executor access - userId: {}, contractors: {}", userId, userContractorIds);
                     break;
 
                 default:
@@ -152,7 +210,6 @@ public class TicketSpecification {
             Instant dateTo,
             Integer priorityMin
     ) {
-        // Оборачиваем одиночный statusId в список
         List<Integer> statusIds = statusId != null ? List.of(statusId) : null;
         return filterWithParams(
                 role, userId, userInstitutionIds, userContractorIds,
@@ -168,7 +225,7 @@ public class TicketSpecification {
             UUID userId,
             List<Integer> userInstitutionIds,
             List<Integer> userContractorIds,
-            List<Integer> statusIds,          // ✅ Список статусов
+            List<Integer> statusIds,
             Integer typeId,
             Integer institutionId,
             Instant dateFrom,
@@ -179,7 +236,6 @@ public class TicketSpecification {
                 .and((root, query, cb) -> {
                     List<Predicate> predicates = new ArrayList<>();
 
-                    // ✅ Фильтрация по списку статусов
                     if (statusIds != null && !statusIds.isEmpty()) {
                         predicates.add(root.get("status").get("id").in(statusIds));
                         log.debug("Filtering by statusIds: {}", statusIds);
@@ -216,31 +272,25 @@ public class TicketSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // Базовые условия
             predicates.add(cb.isFalse(root.get("isDeleted")));
             predicates.add(cb.equal(root.get("idContractor"), contractorId));
 
-            // Фильтр по статусам
             if (statusIds != null && !statusIds.isEmpty()) {
                 predicates.add(root.get("status").get("id").in(statusIds));
             }
 
-            // Фильтр по приоритету
             if (priorityMin != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("priority"), priorityMin));
             }
 
-            // Фильтр по дате от
             if (dateFrom != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("timeRequest"), dateFrom));
             }
 
-            // Фильтр по дате до
             if (dateTo != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("timeRequest"), dateTo));
             }
 
-            // Фильтр по исполнителю (через ticket_assignment)
             if (executorId != null) {
                 Subquery<UUID> subquery = query.subquery(UUID.class);
                 Root<TicketAssignment> assignmentRoot = subquery.from(TicketAssignment.class);
@@ -248,6 +298,8 @@ public class TicketSpecification {
                 subquery.where(cb.equal(assignmentRoot.get("idUser"), executorId));
                 predicates.add(root.get("uuid").in(subquery));
             }
+
+            query.orderBy(cb.desc(root.get("timeRequest")));
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };

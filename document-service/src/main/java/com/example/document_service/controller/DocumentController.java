@@ -130,4 +130,37 @@ public class DocumentController {
         documentService.deleteDocument(documentId, UUID.fromString(userIdString));
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * ✅ НОВЫЙ ENDPOINT: Предпросмотр изображения (inline)
+     */
+    @GetMapping("/{documentId}/preview")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Предпросмотр изображения")
+    public ResponseEntity<byte[]> previewDocument(
+            @PathVariable UUID documentId
+    ) {
+        Document document = documentService.getDocumentById(documentId);
+
+        // ✅ Проверяем что это изображение
+        if (!documentService.isImage(document.getMimeType())) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        InputStream stream = documentService.getDocumentStream(documentId);
+
+        try {
+            byte[] bytes = stream.readAllBytes();
+
+            return ResponseEntity.ok()
+                    // ✅ inline — браузер отобразит, а не скачает
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                    .contentType(MediaType.parseMediaType(document.getMimeType()))
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=3600")
+                    .body(bytes);
+        } catch (Exception e) {
+            log.error("Error previewing document", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 }

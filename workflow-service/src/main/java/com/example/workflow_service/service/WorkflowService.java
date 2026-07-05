@@ -222,7 +222,8 @@ public class WorkflowService {
 
         // 2. Проверяем статус
         if (ticket.getStatus() != TicketStatus.IN_PROGRESS &&
-                ticket.getStatus() != TicketStatus.ASSIGNED) {
+                ticket.getStatus() != TicketStatus.ASSIGNED &&
+                ticket.getStatus() != TicketStatus.RETURNED) {
             throw new BusinessException(
                     String.format("Нельзя закрыть заявку со статусом '%s'",
                             TicketStatus.getName(ticket.getStatus()))

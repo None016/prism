@@ -70,7 +70,7 @@ public class WorkflowController {
      * Вернуть заявку на доработку (только исполнитель)
      */
     @PostMapping("/return")
-    @PreAuthorize("hasAuthority('ROLE_EXECUTOR')")
+    @PreAuthorize("hasAnyAuthority('ROLE_EXECUTOR', 'ROLE_MANAGER')")
     public ResponseEntity<WorkflowResponse> returnTicket(
             @Valid @RequestBody TicketActionRequest request,
             Authentication authentication

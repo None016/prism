@@ -48,4 +48,8 @@ public interface TicketAssignmentRepository extends JpaRepository<TicketAssignme
     @Modifying
     @Query("DELETE FROM TicketAssignment ta WHERE ta.idTicket = :ticketId AND ta.idUser = :userId")
     void deleteByTicketUuidAndUserUuid(@Param("ticketId") UUID ticketId, @Param("userId") UUID userId);
+
+    // ✅ НОВЫЙ МЕТОД: Получить все назначения пользователя
+    @Query("SELECT ta FROM TicketAssignment ta WHERE ta.idUser = :userId")
+    List<TicketAssignment> findAllByUserId(@Param("userId") UUID userId);
 }

@@ -57,7 +57,6 @@ public class ManagerController {
 
             Pageable pageable) {
 
-        // Проверка доступа
         if (!hasAccessToContractor(userContractorsHeader, contractorId)) {
             return ResponseEntity.status(403).build();
         }
@@ -65,37 +64,20 @@ public class ManagerController {
         log.info("Getting tickets for contractor {} with filters: statusIds={}, priorityMin={}, dateFrom={}, dateTo={}, executorId={}",
                 contractorId, statusIds, priorityMin, dateFrom, dateTo, executorId);
 
-        // ✅ Строим спецификацию
+        // ✅ ИСПРАВЛЕНО: Используем Specification вместо findFilteredTickets
         Specification<Ticket> spec = TicketSpecification.forManager(
                 contractorId,
                 statusIds,
                 priorityMin,
-                dateFrom != null ? parseDateToInstant(dateFrom) : null,
-                dateTo != null ? parseDateToInstant(dateTo) : null,
+                parseDateToInstant(dateFrom),
+                parseDateToInstant(dateTo),
                 executorId
         );
 
-        // ✅ Используем Specification API (без проблем с PostgreSQL)
         Page<Ticket> tickets = ticketRepository.findAll(spec, pageable);
         Page<TicketResponse> response = tickets.map(ticketMapper::toResponse);
 
         return ResponseEntity.ok(response);
-    }
-
-    // ✅ Парсинг даты в Instant (не LocalDateTime!)
-    private Instant parseDateToInstant(String dateStr) {
-        try {
-            if (dateStr.contains("T")) {
-                // Формат: "2026-01-01T00:00:00"
-                return LocalDateTime.parse(dateStr).toInstant(ZoneOffset.UTC);
-            } else {
-                // Формат: "2026-01-01" → начало дня
-                return LocalDate.parse(dateStr).atStartOfDay().toInstant(ZoneOffset.UTC);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to parse date: {}", dateStr);
-            return null;
-        }
     }
 
     @Operation(summary = "Получить список исполнителей подразделения")
@@ -141,7 +123,22 @@ public class ManagerController {
         return ResponseEntity.ok(dtos);
     }
 
-    // ===== Маппинг entity → DTO =====
+    // ✅ НОВЫЙ МЕТОД: Парсинг даты в Instant
+    private Instant parseDateToInstant(String dateStr) {
+        if (dateStr == null || dateStr.isBlank()) return null;
+        try {
+            if (dateStr.contains("T")) {
+                return LocalDateTime.parse(dateStr).toInstant(ZoneOffset.UTC);
+            } else {
+                return LocalDate.parse(dateStr).atStartOfDay().toInstant(ZoneOffset.UTC);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse date: {}", dateStr);
+            return null;
+        }
+    }
+
+    // ===== Маппинг =====
 
     private TicketAssignmentDto mapToAssignmentDto(TicketAssignment assignment) {
         Users executor = userRepository.findByUuid(assignment.getIdUser()).orElse(null);
@@ -157,7 +154,6 @@ public class ManagerController {
     }
 
     private UserDto mapToUserDto(Users user) {
-        // ✅ Считаем только активные заявки (статус "В работе")
         int activeTicketsCount = (int) assignmentRepository.countActiveTicketsByUserId(user.getUuid());
 
         return UserDto.builder()
@@ -173,7 +169,7 @@ public class ManagerController {
                 .build();
     }
 
-    // ===== Проверка доступа =====
+    // ===== Безопасность =====
 
     private boolean hasAccessToContractor(String userContractorsHeader, Integer contractorId) {
         if (userContractorsHeader == null || userContractorsHeader.isBlank()) {

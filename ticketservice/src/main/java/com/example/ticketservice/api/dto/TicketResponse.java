@@ -1,7 +1,6 @@
 package com.example.ticketservice.api.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.example.ticketservice.domain.entity.Ticket;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,14 +19,21 @@ public class TicketResponse {
     private String title;
     private String notes;
     private String typeName;
+
+    // ✅ Информация об учреждении (где создана заявка)
     private InstitutionInfo institution;
+
+    // ✅ НОВОЕ: Информация о подрядчике (организации)
+    private ContractorInfo contractor;
+
     private Integer idContractor;
-    private Integer idInstitution;  // ✅ ID учреждения
+    private Integer idInstitution;
     private Instant timeRequest;
     private Instant timeUpdate;
     private Instant timeClosing;
-    private Integer status;         // ✅ ID статуса
-    private String statusName;      // Название статуса
+    private String executionTime;  // ✅ ДОБАВЛЕНО
+    private Integer status;
+    private String statusName;
     private Integer priority;
     private JsonNode ditionalFields;
 
@@ -39,34 +45,16 @@ public class TicketResponse {
         private Integer id;
         private String name;
         private String address;
-        // ✅ УБРАЛИ idType — его нет в сущности Institution
     }
 
-    public static TicketResponse fromEntity(Ticket ticket) {
-        TicketResponseBuilder builder = TicketResponse.builder()
-                .uuid(ticket.getUuid())
-                .title(ticket.getTitle())
-                .notes(ticket.getNotes())
-                .typeName(ticket.getTypeTicket() != null ? ticket.getTypeTicket().getNameType() : null)
-                .idContractor(ticket.getIdContractor())
-                .idInstitution(ticket.getInstitution() != null ? ticket.getInstitution().getId() : null)
-                .timeRequest(ticket.getTimeRequest())
-                .timeUpdate(ticket.getTimeUpdate())
-                .timeClosing(ticket.getTimeClosing())
-                .status(ticket.getStatus() != null ? ticket.getStatus().getId() : null)
-                .statusName(ticket.getStatus() != null ? ticket.getStatus().getNameType() : null)
-                .priority(ticket.getPriority())
-                .ditionalFields(ticket.getDitionalFields());
-
-        // ✅ УБРАЛИ idType из builder
-        if (ticket.getInstitution() != null) {
-            builder.institution(InstitutionInfo.builder()
-                    .id(ticket.getInstitution().getId())
-                    .name(ticket.getInstitution().getName())
-                    .address(ticket.getInstitution().getAddress())
-                    .build());
-        }
-
-        return builder.build();
+    // ✅ НОВЫЙ вложенный класс
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ContractorInfo {
+        private Integer id;
+        private String name;
+        private String address;
     }
 }

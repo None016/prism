@@ -25,4 +25,13 @@ public interface UserRepository extends JpaRepository<Users, UUID> {
 
     @Query("SELECT u FROM Users u WHERE u.roleId IN (SELECT r.id FROM Role r WHERE r.nameRole = 'ROLE_EXECUTOR')")
     List<Users> findAllExecutors();
+
+
+    // ✅ НОВЫЙ МЕТОД: Получить institutionIds пользователя
+    @Query("SELECT ui.institutionId FROM UserInstitution ui WHERE ui.userId = :userId")
+    List<Integer> findInstitutionIdsByUserId(@Param("userId") UUID userId);
+
+    // ✅ НОВЫЙ МЕТОД: Получить contractorIds пользователя
+    @Query("SELECT uc.contractorId FROM UserContractor uc WHERE uc.userId = :userId")
+    List<Integer> findContractorIdsByUserId(@Param("userId") UUID userId);
 }
